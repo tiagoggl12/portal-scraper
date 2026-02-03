@@ -2,12 +2,12 @@
 title: Portal da Transparência de Fortaleza
 emoji: 🏢
 colorFrom: green
-colorTo: teal
+colorTo: green
 sdk: streamlit
 sdk_version: 1.31.0
 app_file: app.py
 pinned: false
-license: MIT
+license: mit
 ---
 
 # Portal da Transparência de Fortaleza

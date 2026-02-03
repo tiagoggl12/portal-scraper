@@ -1,45 +1,63 @@
-# Portal da Transparência - Scraper & Dashboard
+# 🏢 Portal da Transparência de Fortaleza
 
-Sistema automático para coletar dados do Portal da Transparência de Fortaleza e visualizar em dashboard interativo.
+<!-- DASHBOARD LINK -->
+<div align="center">
+
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://huggingface.co/spaces/tiagoggl12/portal-transparencia-fortaleza)
+
+### 👉 **[Acessar Dashboard](https://huggingface.co/spaces/tiagoggl12/portal-transparencia-fortaleza)** 👈
+
+*Dados atualizados diariamente às 3:00 AM (BRT)*
+
+</div>
+
+---
 
 ## :information_source: Sobre o Projeto
 
-Este projeto:
+Este sistema:
 1. **Coleta dados** diários do Portal da Transparência de Fortaleza via API
 2. **Armazena** em banco de dados SQLite (acumulativo)
 3. **Visualiza** em dashboard interativo com Streamlit
-4. **Agenda** execução automática todos os dias
+4. **Agenda** execução automática todos os dias via GitHub Actions
 
-## :rocket: Funcionalidades
+## :chart_with_upwards_trend: Dashboard
 
-- Download automático de despesas detalhadas (Empenho, Liquidação, Pagamento)
-- Armazenamento em banco SQLite local
-- Dashboard interativo com filtros e gráficos
-- Exportação para CSV
-- Execução agendada diária
+### Funcionalidades
 
-## :file_folder: Estrutura do Projeto
+- **📊 Visão Geral**: Totais empenhado, liquidado e pago
+- **📈 Análise Temporal**: Evolução com média móvel de 7 dias
+- **🔗 Correlações**: Top favorecidos, scatter plot, matriz de correlação
+- **🔍 Filtros**: Por fase, órgão e período de datas
 
-```
-portal-scraper/
-├── scraper.py          # Script principal de coleta de dados
-├── dashboard.py        # Dashboard Streamlit
-├── scheduler.py        # Agendador de execução automática
-├── requirements.txt    # Dependências Python
-├── data/              # Diretório de dados
-│   └── despesas.db    # Banco SQLite
-├── logs/              # Logs de execução
-└── README.md          # Este arquivo
-```
+### Dados Exibidos
 
-## :wrench: Instalação
+- Empenhado vs Liquidado vs Pago
+- Top 20 favorecidos acumulados
+- Top 10 órgãos por valor pago
+- Evolução diária de pagamentos
+- Correlação Empenhado × Pago por órgão
 
-### 1. Criar ambiente virtual
+---
+
+## :rocket: Tecnologias
+
+- **Python 3.11+**
+- **Streamlit** - Dashboard interativo
+- **SQLite** - Banco de dados
+- **Plotly** - Gráficos interativos
+- **GitHub Actions** - Automação diária
+- **Hugging Face Spaces** - Hospedagem do dashboard
+
+---
+
+## :wrench: Instalação Local
+
+### 1. Clonar repositório
 
 ```bash
-cd /Users/tiago/portal-scraper
-python3 -m venv venv
-source venv/bin/activate
+git clone https://github.com/tiagoggl12/portal-scraper.git
+cd portal-scraper
 ```
 
 ### 2. Instalar dependências
@@ -48,148 +66,91 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## :play_button: Uso
-
-### Execução única (baixar dados de ontem)
+### 3. Executar scraper (coletar dados)
 
 ```bash
-python scraper.py
+python3 scraper.py
 ```
 
-### Executar com dados históricos (últimos 30 dias)
-
-Adicione ao final do `scraper.py`:
-
-```python
-if __name__ == "__main__":
-    api = PortalTransparenciaAPI()
-    db = DatabaseManager()
-    baixar_dados_anteriores(db, api, dias=30)
-```
-
-### Iniciar Dashboard
+### 4. Iniciar dashboard local
 
 ```bash
 streamlit run dashboard.py
 ```
 
-O dashboard estará disponível em: http://localhost:8501
+Acesse: http://localhost:8501
 
-### Execução Automática Diária
+---
 
-```bash
-python scheduler.py
-```
+## :calendar: Automação
 
-O scheduler executará automaticamente às 6:00 da manhã todos os dias.
+### GitHub Actions (Produção)
 
-## :calendar: Agendamento com Cron (recomendado)
+O scraping roda automaticamente todos os dias às **3:00 AM (BRT)** via GitHub Actions.
 
-Para execução automática no macOS/Linux:
+Ver status: https://github.com/tiagoggl12/portal-scraper/actions
 
-```bash
-# Editar crontab
-crontab -e
-
-# Adicionar linha (executa todos os dias às 6:00)
-0 6 * * * cd /Users/tiago/portal-scraper && /usr/bin/python3 scraper.py >> logs/cron.log 2>&1
-```
-
-Ou usar launchd no macOS:
+### Launchd (Local - macOS)
 
 ```bash
-# Criar arquivo ~/Library/LaunchAgents/com.user.portal-scraper.plist
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.user.portal-scraper</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/python3</string>
-        <string>/Users/tiago/portal-scraper/scraper.py</string>
-    </array>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>6</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
-    <key>WorkingDirectory</key>
-    <string>/Users/tiago/portal-scraper</string>
-    <key>StandardOutPath</key>
-    <string>/Users/tiago/portal-scraper/logs/scheduler.log</string>
-    <key>StandardErrorPath</key>
-    <string>/Users/tiago/portal-scraper/logs/scheduler.log</string>
-</dict>
-</plist>
-```
-
-Carregar o agente:
-```bash
+cp com.user.portal-scraper.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.user.portal-scraper.plist
 ```
 
-## :chart_with_upwards_trend: Dashboard
+---
 
-O dashboard oferece:
+## :computer: API
 
-- **Resumo Geral**: Totais empenhado, liquidado e pago
-- **Evolução Diária**: Gráfico de linha com pagamentos por dia
-- **Top Órgãos**: Ranking de órgãos por valor pago
-- **Por Fase**: Distribuição empenho x liquidação x pagamento
-- **Tabela Detalhada**: Dados completos com filtros
-
-### Filtros Disponíveis
-
-- Fase da despesa (Empenho, Liquidação, Pagamento)
-- Órgão específico
-- Período de datas
-
-## :computer: API Direta
-
-O sistema utiliza a API do Portal da Transparência:
+Endpoint utilizado:
 
 ```
 GET https://portaltransparencia-back.sepog.fortaleza.ce.gov.br/api/despesas/detalhadas/diarias/{data_inicio}/{data_fim}/{fase}
 ```
 
-Parâmetros:
+**Parâmetros:**
 - `data_inicio`: DD-MM-YYYY
 - `data_fim`: DD-MM-YYYY
-- `fase`: empenho, liquidacao, ou pagamento
+- `fase`: `empenho`, `liquidacao`, ou `pagamento`
 
-## :database: Banco de Dados
+---
 
-Estrutura da tabela `despesas`:
+## :file_folder: Estrutura
 
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| api_id | INTEGER | ID único da API |
-| exercicio | INTEGER | Ano do exercício |
-| data_pagamento | TEXT | Data do pagamento |
-| fase | TEXT | Fase da despesa |
-| favorecido | TEXT | Nome do credor |
-| orgao | TEXT | Órgão responsável |
-| valor_pago | REAL | Valor pago |
-| ... | ... | Outros campos |
+```
+portal-scraper/
+├── scraper.py          # Script de coleta de dados
+├── dashboard.py        # Dashboard Streamlit local
+├── huggingface-space/  # Arquivos para deploy
+│   ├── app.py         # Dashboard para Hugging Face
+│   ├── README.md      # Config do Space
+│   └── requirements.txt
+├── .github/workflows/ # GitHub Actions
+│   └── daily-scraper.yml
+├── data/
+│   └── despesas.db    # Banco SQLite
+└── requirements.txt
+```
+
+---
+
+## :books: Links Úteis
+
+| Link | Descrição |
+|------|-----------|
+| [Dashboard](https://huggingface.co/spaces/tiagoggl12/portal-transparencia-fortaleza) | 📊 Dashboard Online |
+| [GitHub Actions](https://github.com/tiagoggl12/portal-scraper/actions) | ⚙️ Status do Scraping |
+| [Portal da Transparência](https://portaltransparencia.fortaleza.ce.gov.br) | 🏛️ Fonte dos Dados |
+
+---
 
 ## :warning: Troubleshooting
 
-**Erro: Banco de dados não encontrado**
-- Execute `python scraper.py` pela primeira vez para criar o banco
+| Problema | Solução |
+|----------|---------|
+| Banco não encontrado | Execute `python3 scraper.py` |
+| Dashboard sem dados | Aguarde atualização ou execute scraper manualmente |
+| GitHub Actions falhando | Verifique se a API do Portal está acessível |
 
-**Erro: Nenhum dado disponível**
-- Verifique se a API está acessível
-- Confira o log em `logs/scraper.log`
+---
 
-**Dashboard não carrega**
-- Verifique se o arquivo `data/despesas.db` existe
-- Execute `streamlit run dashboard.py` no diretório do projeto
-
-## :books: Referências
-
-- Portal da Transparência de Fortaleza: https://portaltransparencia.fortaleza.ce.gov.br
-- Streamlit: https://streamlit.io
+**Desenvolvido para transparência pública das despesas de Fortaleza.**

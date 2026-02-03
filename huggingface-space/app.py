@@ -110,7 +110,7 @@ st.markdown("""
 # ============================================================================
 
 DB_PATH = "data/despesas.db"
-DB_URL = "https://raw.githubusercontent.com/tiagofortaleza/portal-scraper/refs/heads/main/data/despesas.db"
+DB_URL = "https://raw.githubusercontent.com/tiagoggl12/portal-scraper/main/data/despesas.db"
 
 def get_db_connection():
     """Cria conexão com o banco de dados"""
