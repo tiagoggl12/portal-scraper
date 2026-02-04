@@ -10,6 +10,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import networkx as nx
 from datetime import datetime, timedelta
 import streamlit as st
 
@@ -520,6 +521,334 @@ def tab_analise_temporal(df: pd.DataFrame):
 
 
 # ============================================================================
+# GRAFO DE CORRELAÇÕES
+# ============================================================================
+
+def criar_grafo_correlacoes(df: pd.DataFrame, min_correlacao: float = 0.3, top_n_orgaos: int = 15):
+    """
+    Cria um grafo de correlações usando Plotly.
+
+    Args:
+        df: DataFrame com os dados
+        min_correlacao: Correlação mínima para exibir conexão
+        top_n_orgaos: Número de órgãos a incluir
+
+    Returns:
+        Figure do Plotly com o grafo
+    """
+    if df.empty:
+        return go.Figure()
+
+    # Variáveis numéricas base
+    vars_numericas = ['valor_empenhado', 'valor_liquidado', 'valor_pago', 'valor_anulado']
+
+    # 1. Calcular matriz de correlação geral (variáveis numéricas)
+    df_corr_geral = df[vars_numericas].corr()
+
+    # 2. Calcular correlações por órgão
+    top_orgaos = df.groupby('orgao')['valor_pago'].sum().nlargest(top_n_orgaos).index.tolist()
+
+    # Criar grafo NetworkX
+    G = nx.Graph()
+
+    # Adicionar nós das variáveis numéricas
+    labels_vars = {
+        'valor_empenhado': 'Empenhado',
+        'valor_liquidado': 'Liquidado',
+        'valor_pago': 'Pago',
+        'valor_anulado': 'Anulado'
+    }
+
+    for var in vars_numericas:
+        G.add_node(var, label=labels_vars[var], type='variavel', size=30)
+
+    # Adicionar nós dos órgãos
+    for i, orgao in enumerate(top_orgaos):
+        nome_curto = orgao[:25] + '...' if len(orgao) > 25 else orgao
+        G.add_node(f"org_{i}", label=nome_curto, type='orgao', nome_orgao=orgao, size=20)
+
+    # Adicionar arestas entre variáveis (correlação geral)
+    for i, var1 in enumerate(vars_numericas):
+        for j, var2 in enumerate(vars_numericas):
+            if i < j:
+                corr = df_corr_geral.loc[var1, var2]
+                if abs(corr) >= min_correlacao:
+                    G.add_edge(var1, var2, weight=abs(corr), correlation=corr, tipo='variavel')
+
+    # Adicionar arestas entre órgãos baseado em correlação de padrões de pagamento
+    for i, orgao1 in enumerate(top_orgaos):
+        for j, orgao2 in enumerate(top_orgaos):
+            if i < j:
+                # Calcular correlação entre os padrões de pagamento dos dois órgãos
+                df_org1 = df[df['orgao'] == orgao1][['data_pagamento', 'valor_pago']].dropna()
+                df_org2 = df[df['orgao'] == orgao2][['data_pagamento', 'valor_pago']].dropna()
+
+                if len(df_org1) > 2 and len(df_org2) > 2:
+                    # Merge por data para calcular correlação
+                    df_merged = pd.merge(
+                        df_org1.groupby('data_pagamento')['valor_pago'].sum(),
+                        df_org2.groupby('data_pagamento')['valor_pago'].sum(),
+                        on='data_pagamento', suffixes=('_1', '_2'), how='inner'
+                    )
+
+                    if len(df_merged) > 2:
+                        corr = df_merged['valor_pago_1'].corr(df_merged['valor_pago_2'])
+                        if not pd.isna(corr) and abs(corr) >= min_correlacao:
+                            G.add_edge(
+                                f"org_{i}", f"org_{j}",
+                                weight=abs(corr),
+                                correlation=corr,
+                                tipo='orgao'
+                            )
+
+    # Layout do grafo usando spring layout
+    pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+
+    # Extrair informações para Plotly
+    node_x = []
+    node_y = []
+    node_text = []
+    node_colors = []
+    node_sizes = []
+
+    color_map = {
+        'variavel': '#00a195',
+        'orgao': '#ff6b6b'
+    }
+
+    for node, data in G.nodes(data=True):
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_text.append(data.get('label', node))
+        node_colors.append(color_map.get(data.get('type', 'variavel'), '#00a195'))
+        node_sizes.append(data.get('size', 20))
+
+    # Arestas
+    edge_x = []
+    edge_y = []
+    edge_colors = []
+    edge_widths = []
+
+    for edge in G.edges(data=True):
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+
+        corr = edge[2].get('correlation', 0)
+        # Verde para positivo, vermelho para negativo
+        if corr > 0:
+            edge_colors.append('rgba(0, 161, 149, 0.6)')
+        else:
+            edge_colors.append('rgba(255, 107, 107, 0.6)')
+
+        # Largura baseada na força da correlação
+        edge_widths.append(abs(corr) * 5)
+
+    # Criar figura Plotly
+    fig = go.Figure()
+
+    # Adicionar arestas
+    for i in range(0, len(edge_x), 3):
+        fig.add_trace(go.Scatter(
+            x=edge_x[i:i+3],
+            y=edge_y[i:i+3],
+            mode='lines',
+            line=dict(
+                color=edge_colors[i//3] if i//3 < len(edge_colors) else 'rgba(150,150,150,0.3)',
+                width=edge_widths[i//3] if i//3 < len(edge_widths) else 1
+            ),
+            hoverinfo='none',
+            showlegend=False
+        ))
+
+    # Adicionar nós
+    fig.add_trace(go.Scatter(
+        x=node_x,
+        y=node_y,
+        mode='markers+text',
+        marker=dict(
+            size=node_sizes,
+            color=node_colors,
+            line=dict(color='white', width=2)
+        ),
+        text=node_text,
+        textposition='middle center',
+        textfont=dict(size=10, color='white'),
+        hovertemplate='<b>%{text}</b><extra></extra>',
+        showlegend=False
+    ))
+
+    # Adicionar anotações das correlações nas arestas
+    for edge in G.edges(data=True):
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        corr = edge[2].get('correlation', 0)
+
+        if abs(corr) >= min_correlacao:
+            x_mid = (x0 + x1) / 2
+            y_mid = (y0 + y1) / 2
+
+            fig.add_annotation(
+                x=x_mid,
+                y=y_mid,
+                text=f"{corr:.2f}",
+                showarrow=False,
+                font=dict(size=8, color='white'),
+                bgcolor='rgba(0,0,0,0.7)',
+                bordercolor=corr > 0 and '#34d399' or '#f87171',
+                borderwidth=1,
+                borderpad=2
+            )
+
+    fig.update_layout(
+        title=dict(
+            text='Grafo de Correlações',
+            x=0.5,
+            xanchor='center',
+            font=dict(size=18, color='#1a5f3f')
+        ),
+        showlegend=False,
+        hovermode='closest',
+        margin=dict(b=20, l=5, r=5, t=40),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        height=600
+    )
+
+    # Adicionar legenda
+    fig.add_annotation(
+        x=0.02, y=0.98,
+        xref='paper', yref='paper',
+        text='<b>Legenda:</b><br>' +
+             '<span style="color:#00a195">■ Variáveis</span><br>' +
+             '<span style="color:#ff6b6b">■ Órgãos</span><br>' +
+             '<span style="color:#34d399">─ Corr. Positiva</span><br>' +
+             '<span style="color:#f87171">─ Corr. Negativa</span>',
+        showarrow=False,
+        font=dict(size=11),
+        bgcolor='rgba(255,255,255,0.9)',
+        bordercolor='#e2e8f0',
+        borderwidth=1,
+        borderpad=10,
+        align='left'
+    )
+
+    return fig
+
+
+def criar_grafo_outras_correlacoes(df: pd.DataFrame, tipo: str = 'variaveis'):
+    """
+    Cria gráficos de correlação alternativos.
+
+    Args:
+        df: DataFrame com os dados
+        tipo: Tipo de grafo ('variaveis', 'orgaos')
+
+    Returns:
+        Figure do Plotly
+    """
+    if df.empty:
+        return go.Figure()
+
+    if tipo == 'variaveis':
+        # Matriz de correlação das variáveis numéricas
+        vars_numericas = ['valor_empenhado', 'valor_liquidado', 'valor_pago', 'valor_anulado']
+        df_corr = df[vars_numericas].corr()
+
+        labels = ['Empenhado', 'Liquidado', 'Pago', 'Anulado']
+
+        fig = go.Figure(data=go.Heatmap(
+            z=df_corr.values,
+            x=labels,
+            y=labels,
+            colorscale='RdYlGn',
+            zmid=0,
+            text=np.round(df_corr.values, 2),
+            texttemplate='%{text}',
+            textfont={"size": 12},
+            colorbar=dict(title="Correlação")
+        ))
+
+        fig.update_layout(
+            title='Matriz de Correlação das Variáveis',
+            xaxis_title='',
+            yaxis_title='',
+            height=500
+        )
+
+        return fig
+
+    elif tipo == 'sankey':
+        # Sankey diagram mostrando fluxo: Empenhado -> Liquidado -> Pago por órgão
+        top_orgaos = df.groupby('orgao')['valor_empenhado'].sum().nlargest(8).index.tolist()
+
+        df_filtrado = df[df['orgao'].isin(top_orgaos)]
+
+        # Preparar dados para Sankey
+        empenhado_por_orgao = df_filtrado.groupby('orgao')['valor_empenhado'].sum()
+        liquidado_por_orgao = df_filtrado.groupby('orgao')['valor_liquidado'].sum()
+        pago_por_orgao = df_filtrado.groupby('orgao')['valor_pago'].sum()
+
+        # Nós
+        nodes = ['Empenhado'] + list(top_orgaos) + ['Pago']
+        node_dict = {node: i for i, node in enumerate(nodes)}
+
+        # Links
+        sources = []
+        targets = []
+        values = []
+        labels = []
+
+        # Empenhado -> Órgãos
+        for orgao in top_orgaos:
+            val = empenhado_por_orgao[orgao]
+            if val > 0:
+                sources.append(node_dict['Empenhado'])
+                targets.append(node_dict[orgao])
+                values.append(val)
+                labels.append(orgao[:20])
+
+        # Órgãos -> Pago
+        for orgao in top_orgaos:
+            val = pago_por_orgao[orgao]
+            if val > 0:
+                sources.append(node_dict[orgao])
+                targets.append(node_dict['Pago'])
+                values.append(val)
+                labels.append(orgao[:20])
+
+        # Cores para órgãos
+        colors_orgaos = [f'rgba(0, {100 + i*15}, 149, 0.5)' for i in range(len(top_orgaos))]
+
+        fig = go.Figure(data=[go.Sankey(
+            node=dict(
+                pad=15,
+                thickness=20,
+                line=dict(color='white', width=0.5),
+                label=nodes,
+                color=['#00a195'] + colors_orgaos + ['#00a195']
+            ),
+            link=dict(
+                source=sources,
+                target=targets,
+                value=values,
+                color=colors_orgaos * 2
+            )
+        )])
+
+        fig.update_layout(
+            title='Fluxo Financeiro: Empenhado → Pago (Top 8 Órgãos)',
+            height=600
+        )
+
+        return fig
+
+
+# ============================================================================
 # ABA CORRELAÇÕES
 # ============================================================================
 
@@ -532,13 +861,89 @@ def tab_correlacoes(df: pd.DataFrame):
         return
 
     # Sub-tabs
-    subtab1, subtab2, subtab3 = st.tabs(["🏆 Top Favorecidos", "📊 Empenhado x Pago", "🌡️ Matriz de Correlação"])
+    subtab1, subtab2, subtab3, subtab4 = st.tabs([
+        "🕸️ Grafo de Correlações",
+        "🏆 Top Favorecidos",
+        "📊 Empenhado x Pago",
+        "🌡️ Matriz de Correlação"
+    ])
 
     with subtab1:
+        st.subheader("Visualização em Grafo")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            min_corr = st.slider(
+                "Correlação Mínima",
+                min_value=0.0,
+                max_value=0.9,
+                value=0.3,
+                step=0.1,
+                help="Correlação mínima para exibir conexão entre nós"
+            )
+        with col2:
+            top_n = st.selectbox(
+                "Top Órgãos",
+                options=[5, 10, 15, 20, 25],
+                index=2,
+                help="Número de órgãos a incluir no grafo"
+            )
+        with col3:
+            tipo_grafo = st.selectbox(
+                "Tipo de Visualização",
+                options=["Grafo de Rede", "Matriz de Calor", "Diagrama Sankey"],
+                index=0
+            )
+
+        if tipo_grafo == "Grafo de Rede":
+            fig = criar_grafo_correlacoes(df, min_correlacao=min_corr, top_n_orgaos=top_n)
+            st.plotly_chart(fig, use_container_width=True)
+
+            with st.expander("ℹ️ Interpretação do Grafo"):
+                st.info("""
+                **O que o grafo mostra:**
+
+                - **Nós verdes (Variáveis)**: Empenhado, Liquidado, Pago, Anulado
+                - **Nós vermelhos (Órgãos)**: Top órgãos por valor pago
+
+                **Conexões (Arestas):**
+                - **Linhas verdes**: Correlação positiva (variam juntas)
+                - **Linhas vermelhas**: Correlação negativa (variam em oposição)
+                - **Espessura**: Força da correlação (mais espesso = mais forte)
+                - **Números nas arestas**: Valor da correlação (-1 a 1)
+
+                **Exemplos de interpretação:**
+                - Correlação próxima de 1: quando uma sobe, a outra também sobe
+                - Correlação próxima de -1: quando uma sobe, a outra desce
+                - Correlação próxima de 0: não há relação linear
+                """)
+
+        elif tipo_grafo == "Matriz de Calor":
+            fig = criar_grafo_outras_correlacoes(df, tipo='variaveis')
+            st.plotly_chart(fig, use_container_width=True)
+
+        elif tipo_grafo == "Diagrama Sankey":
+            fig = criar_grafo_outras_correlacoes(df, tipo='sankey')
+            st.plotly_chart(fig, use_container_width=True)
+
+            with st.expander("ℹ️ Interpretação do Sankey"):
+                st.info("""
+                **O que o diagrama mostra:**
+
+                Fluxo financeiro do valor **Empenhado** → **Pago** através dos principais órgãos.
+
+                - **Largura das faixas**: Valor financeiro
+                - **Cores**: Diferentes órgãos
+
+                Útil para visualizar quais órgãos têm maior volume de empenhos
+                e quanto efetivamente foi pago.
+                """)
+
+    with subtab2:
         st.subheader("Top 20 Favorecidos Acumulados")
         top_favorecidos_table(df, top_n=20)
 
-    with subtab2:
+    with subtab3:
         st.subheader("Scatter Plot: Empenhado vs Pago (por Órgão)")
 
         df_orgao = df.groupby('orgao')[['valor_empenhado', 'valor_pago']].sum().reset_index()
@@ -583,7 +988,7 @@ def tab_correlacoes(df: pd.DataFrame):
                 - **Tamanho do ponto**: Valor total pago
                 """)
 
-    with subtab3:
+    with subtab4:
         st.subheader("Matriz de Correlação")
 
         # Selecionar variáveis numéricas
