@@ -115,9 +115,7 @@ st.markdown(
 # ============================================================================
 
 DB_PATH = "data/despesas.db"
-DB_URL = (
-    "https://raw.githubusercontent.com/tiagoggl12/portal-scraper/main/data/despesas.db"
-)
+DB_URL = "https://huggingface.co/datasets/tiagoggl12/fortaleza-transparencia/resolve/main/despesas.db"
 
 
 def get_db_connection():
