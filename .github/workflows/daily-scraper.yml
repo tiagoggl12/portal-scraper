@@ -1,3 +1,4 @@
+# Test run to verify permissions fix
 name: Daily Data Scraper
 
 on:
